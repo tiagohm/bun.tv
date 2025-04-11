@@ -114,7 +114,11 @@ export class Tv {
 			const index = line.indexOf('A-V')
 
 			if (index) {
-				console.log(line.substring(0, index - 1))
+				const timestamp = line.substring(0, index - 1)
+
+				if (timestamp) {
+					console.info(timestamp)
+				}
 			}
 
 			return reader.read().then(read)
