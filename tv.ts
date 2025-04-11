@@ -10,7 +10,7 @@ const LOGO_REGEX = /tvg-logo="([^"]+)"/
 
 const INPUT_FILE = Bun.file('tv.m3u8')
 
-const IGNORE_NAMES = ['SD', 'FHD', '4K']
+const IGNORE_NAMES = ['SD', 'FHD', '4K', '24H']
 const IGNORE_EXTENSIONS = ['.mp4', '.mkv', '.avi']
 
 export class Tv {
@@ -53,7 +53,7 @@ export class Tv {
 						const url = m3u8[i + 1].trim()
 						const name = matcher[1].trim().toUpperCase()
 
-						if (IGNORE_EXTENSIONS.findIndex(e => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex(e => name.includes(e)) < 0) {
+						if (IGNORE_EXTENSIONS.findIndex((e) => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex((e) => name.includes(e)) < 0) {
 							this.channels.set(name, { url, name, logo })
 							i++
 						}
@@ -85,7 +85,7 @@ export class Tv {
 
 		this.process?.kill()
 
-		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner']
+		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-alwaysontop', '-window_title', channel.name]
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
