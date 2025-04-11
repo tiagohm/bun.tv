@@ -6,7 +6,7 @@ const tv = new Tv()
 
 tv.load()
 
-const app = new Elysia()
+const app = new Elysia({ serve: { idleTimeout: 255 } })
 
 app.get('/', indexHtml)
 app.get('/channels', () => tv.list())

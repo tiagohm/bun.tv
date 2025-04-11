@@ -10,6 +10,9 @@ const LOGO_REGEX = /tvg-logo="([^"]+)"/
 
 const INPUT_FILE = Bun.file('tv.m3u8')
 
+const IGNORE_NAMES = ['SD', 'FHD', '4K']
+const IGNORE_EXTENSIONS = ['.mp4', '.mkv', '.avi']
+
 export class Tv {
 	private readonly channels = new Map<string, Channel>()
 	private process: Bun.Subprocess | undefined = undefined
@@ -50,7 +53,7 @@ export class Tv {
 						const url = m3u8[i + 1].trim()
 						const name = matcher[1].trim().toUpperCase()
 
-						if (url.endsWith('.m3u8')) {
+						if (IGNORE_EXTENSIONS.findIndex(e => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex(e => name.includes(e)) < 0) {
 							this.channels.set(name, { url, name, logo })
 							i++
 						}
