@@ -29,6 +29,11 @@ export class Tv {
 		this.channels.clear()
 	}
 
+	kill() {
+		this.process?.kill()
+		this.process = undefined
+	}
+
 	async load(text?: string) {
 		this.clear()
 
@@ -90,14 +95,32 @@ export class Tv {
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
 
-		this.process = Bun.spawn(commands, {
+		const p = Bun.spawn(commands, {
 			stdout: 'ignore',
-			stderr: 'inherit',
+			stderr: 'pipe',
 		})
 
-		this.process.exited.then((code) => {
+		const reader = p.stderr.getReader()
+		const decoder = new TextDecoder('utf-8')
+
+		p.exited.then((code) => {
 			console.info('exited: %d', code)
 		})
+
+		reader.read().then(function read({ done, value }): unknown {
+			if (done) return
+
+			const line = decoder.decode(value)
+			const index = line.indexOf('A-V')
+
+			if (index) {
+				console.log(line.substring(0, index - 1))
+			}
+
+			return reader.read().then(read)
+		})
+
+		this.process = p
 
 		return true
 	}
