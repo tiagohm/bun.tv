@@ -95,6 +95,8 @@ export class Tv {
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
 
+		console.info('▶️ playing channel: ', name)
+
 		const p = Bun.spawn(commands, {
 			stdout: 'ignore',
 			stderr: 'pipe',
@@ -103,8 +105,24 @@ export class Tv {
 		const reader = p.stderr.getReader()
 		const decoder = new TextDecoder('utf-8')
 
+		let currentTimestamp = 0
+		let lastTimestamp = 0
+
+		const timer = setInterval(() => {
+			if (currentTimestamp) {
+				if (lastTimestamp === 0) {
+					lastTimestamp = currentTimestamp
+				} else if (currentTimestamp === lastTimestamp) {
+					console.info('🔄 restarting channel: %s', name)
+					this.kill()
+					this.play(name)
+				}
+			}
+		}, 15000)
+
 		p.exited.then((code) => {
-			console.info('exited: %d', code)
+			console.info('❌ exited: %d', code)
+			clearInterval(timer)
 		})
 
 		reader.read().then(function read({ done, value }): unknown {
@@ -114,10 +132,10 @@ export class Tv {
 			const index = line.indexOf('A-V')
 
 			if (index) {
-				const timestamp = line.substring(0, index - 1)
+				const timestamp = +line.substring(0, index - 1)
 
 				if (timestamp) {
-					console.info(timestamp)
+					currentTimestamp = Math.trunc(timestamp)
 				}
 			}
 
