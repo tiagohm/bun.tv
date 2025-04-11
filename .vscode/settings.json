@@ -1,0 +1,23 @@
+{
+	"editor.formatOnSave": true,
+	"explorer.excludeGitIgnore": true,
+	"typescript.format.semicolons": "remove",
+	"typescript.preferences.quoteStyle": "single",
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"html.format.indentInnerHtml": true,
+	"html.format.wrapAttributes": "force-aligned",
+	"html.format.wrapLineLength": 300,
+	"json.format.keepLines": true,
+	"editor.codeActionsOnSave": {
+		"source.organizeImports": "explicit"
+	},
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[json]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[jsonc]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	}
+}

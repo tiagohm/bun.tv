@@ -1,0 +1,22 @@
+{
+	"name": "buntv",
+	"module": "main.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run .",
+		"compile": "bun build --compile --minify . --outfile buntv.exe"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "latest",
+		"@types/bun": "latest",
+		"@types/node": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"trustedDependencies": ["@biomejs/biome"],
+	"dependencies": {
+		"elysia": "^1.2.25"
+	}
+}
