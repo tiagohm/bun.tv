@@ -88,19 +88,19 @@ export class Tv {
 
 		if (!channel) return false
 
-		this.process?.kill()
+		this.kill()
 
-		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-alwaysontop', '-window_title', channel.name]
+		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name]
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
-
-		console.info('▶️ playing channel: ', name)
 
 		const p = Bun.spawn(commands, {
 			stdout: 'ignore',
 			stderr: 'pipe',
 		})
+
+		console.info('▶️ playing channel: %s (%d)', name, p.pid)
 
 		const reader = p.stderr.getReader()
 		const decoder = new TextDecoder('utf-8')
@@ -121,6 +121,7 @@ export class Tv {
 		}, 15000)
 
 		p.exited.then((code) => {
+			this.process = undefined
 			console.info('❌ exited: %d', code)
 			clearInterval(timer)
 		})
