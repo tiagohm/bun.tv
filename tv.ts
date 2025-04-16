@@ -29,9 +29,12 @@ export class Tv {
 		this.channels.clear()
 	}
 
-	kill() {
-		this.process?.kill()
-		this.process = undefined
+	async kill() {
+		if (this.process) {
+			this.process?.kill('SIGKILL')
+			await this.process.exited
+			this.process = undefined
+		}
 	}
 
 	async load(text?: string) {
@@ -60,39 +63,43 @@ export class Tv {
 
 						if (IGNORE_EXTENSIONS.findIndex((e) => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex((e) => name.includes(e)) < 0) {
 							this.channels.set(name, { url, name, logo })
-							i++
 						}
+
+						i++
 					}
 				}
 			}
 		}
 
-		console.info('📺 channels: %d', this.channels.size)
+		console.info('channels: %d', this.channels.size)
+
+		Bun.gc(true)
 	}
 
 	async download(url?: string, force: boolean = false) {
 		let text: string | undefined
 
 		if (force || !(await INPUT_FILE.exists()) || Date.now() - INPUT_FILE.lastModified >= INPUT_UPDATE_INTERVAL) {
-			console.info('⬇️ downloading...')
+			console.info('downloading...')
 			const response = await fetch(url || Bun.env.IPTV_URL)
 			text = await response.text()
-			await INPUT_FILE.write(text)
+			INPUT_FILE.write(text)
 		}
 
 		return this.load(text)
 	}
 
-	play(name: string) {
+	async play(name: string) {
 		const channel = this.channels.get(name)
 
 		if (!channel) return false
 
-		this.kill()
+		await this.kill()
 
 		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name]
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
+		else commands.push('-noinfbuf')
 		commands.push(channel.url)
 
 		const p = Bun.spawn(commands, {
@@ -100,7 +107,7 @@ export class Tv {
 			stderr: 'pipe',
 		})
 
-		console.info('▶️ playing channel: %s (%d)', name, p.pid)
+		console.info('playing channel: %s (%d)', name, p.pid)
 
 		const reader = p.stderr.getReader()
 		const decoder = new TextDecoder('utf-8')
@@ -108,21 +115,25 @@ export class Tv {
 		let currentTimestamp = 0
 		let lastTimestamp = 0
 
-		const timer = setInterval(() => {
+		const timer = setInterval(async () => {
 			if (currentTimestamp) {
+				console.info('time: %d s', currentTimestamp)
+
 				if (lastTimestamp === 0) {
 					lastTimestamp = currentTimestamp
 				} else if (currentTimestamp === lastTimestamp) {
-					console.info('🔄 restarting channel: %s', name)
-					this.kill()
-					this.play(name)
+					console.info('restarting channel: %s', name)
+					await reader.cancel()
+					clearInterval(timer)
+					await this.play(name)
+				} else {
+					lastTimestamp = currentTimestamp
 				}
 			}
 		}, 15000)
 
 		p.exited.then((code) => {
-			this.process = undefined
-			console.info('❌ exited: %d', code)
+			console.info('exited: %d', code)
 			clearInterval(timer)
 		})
 

@@ -3,7 +3,7 @@ import { Tv } from './tv'
 
 const tv = new Tv()
 
-tv.load()
+tv.download()
 
 const app = new Elysia({ serve: { idleTimeout: 255 } })
 
