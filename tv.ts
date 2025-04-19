@@ -15,7 +15,8 @@ const IGNORE_EXTENSIONS = ['.mp4', '.mkv', '.avi']
 
 export class Tv {
 	private readonly channels = new Map<string, Channel>()
-	private process: Bun.Subprocess | undefined = undefined
+	private process: Bun.Subprocess | undefined
+	private channel: Channel | undefined
 
 	list() {
 		return Array.from(this.channels.values())
@@ -29,11 +30,15 @@ export class Tv {
 		this.channels.clear()
 	}
 
-	async kill() {
+	async kill(name = this.channel?.name) {
 		if (this.process) {
 			this.process?.kill('SIGKILL')
 			await this.process.exited
 			this.process = undefined
+
+			if (name && process.platform === 'win32') {
+				Bun.spawnSync(['taskkill', '/F', '/FI', `WindowTitle eq ${name}`, '/T'])
+			}
 		}
 	}
 
@@ -96,10 +101,11 @@ export class Tv {
 
 		await this.kill()
 
+		this.channel = channel
+
 		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name]
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
-		else commands.push('-noinfbuf')
 		commands.push(channel.url)
 
 		const p = Bun.spawn(commands, {
