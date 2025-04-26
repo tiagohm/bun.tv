@@ -38,6 +38,7 @@ export class Tv {
 
 			if (name && process.platform === 'win32') {
 				Bun.spawnSync(['taskkill', '/F', '/FI', `WindowTitle eq ${name}`, '/T'])
+				await Bun.sleep(1000)
 			}
 		}
 	}
@@ -52,27 +53,37 @@ export class Tv {
 		}
 
 		if (text) {
-			const m3u8 = text.split('\n')
+			let i = 0
 
-			for (let i = 0; i < m3u8.length; i++) {
-				const line = m3u8[i]
+			while (i < text.length) {
+				const a = text.indexOf('\n', i)
+
+				if (a < 0) break
+
+				const line = text.substring(i, a)
 
 				if (line.startsWith('#EXTINF')) {
 					const matcher = NAME_REGEX.exec(line)
 
 					if (matcher?.length) {
-						const logo = LOGO_REGEX.exec(line)?.[1]
+						const b = text.indexOf('\n', a + 1)
 
-						const url = m3u8[i + 1].trim()
-						const name = matcher[1].trim().toUpperCase()
+						if (b > a) {
+							const logo = LOGO_REGEX.exec(line)?.[1]
+							const url = text.substring(a + 1, b).trim()
+							const name = matcher[1].trim().toUpperCase()
 
-						if (IGNORE_EXTENSIONS.findIndex((e) => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex((e) => name.includes(e)) < 0) {
-							this.channels.set(name, { url, name, logo })
+							if (IGNORE_EXTENSIONS.findIndex((e) => url.endsWith(e)) < 0 && IGNORE_NAMES.findIndex((e) => name.includes(e)) < 0) {
+								this.channels.set(name, { url, name, logo })
+							}
+
+							i = b + 1
+							continue
 						}
-
-						i++
 					}
 				}
+
+				i = a + 1
 			}
 		}
 
@@ -94,7 +105,7 @@ export class Tv {
 		return this.load(text)
 	}
 
-	async play(name: string) {
+	async play(name: string, restarted: boolean = false) {
 		const channel = this.channels.get(name)
 
 		if (!channel) return false
@@ -113,7 +124,7 @@ export class Tv {
 			stderr: 'pipe',
 		})
 
-		console.info('playing channel: %s (%d)', name, p.pid)
+		console.info('%splaying channel: %s (%d)', restarted ? 're' : '', name, p.pid)
 
 		const reader = p.stderr.getReader()
 		const decoder = new TextDecoder('utf-8')
@@ -128,19 +139,23 @@ export class Tv {
 				if (lastTimestamp === 0) {
 					lastTimestamp = currentTimestamp
 				} else if (currentTimestamp === lastTimestamp) {
-					console.info('restarting channel: %s', name)
 					await reader.cancel()
 					clearInterval(timer)
-					await this.play(name)
+					await this.play(name, true)
 				} else {
 					lastTimestamp = currentTimestamp
 				}
 			}
 		}, 15000)
 
-		p.exited.then((code) => {
+		p.exited.then(async (code) => {
 			console.info('exited: %d', code)
 			clearInterval(timer)
+
+			if (code === 0 && restarted) {
+				await Bun.sleep(5000)
+				this.play(name, restarted)
+			}
 		})
 
 		reader.read().then(function read({ done, value }): unknown {
