@@ -17,6 +17,8 @@ export class Tv {
 	private readonly channels = new Map<string, Channel>()
 	private process: Bun.Subprocess | undefined
 	private channel: Channel | undefined
+	private starting = false
+	private playing = false
 
 	list() {
 		return Array.from(this.channels.values())
@@ -108,13 +110,15 @@ export class Tv {
 	async play(name: string, restarted: boolean = false) {
 		const channel = this.channels.get(name)
 
-		if (!channel) return false
+		if (!channel || this.starting) return false
+
+		this.starting = true
 
 		await this.kill()
 
 		this.channel = channel
 
-		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name]
+		const commands = [Bun.env.FFPLAY || 'ffplay', '-nostats', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name, '-sync', 'video']
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
@@ -123,6 +127,8 @@ export class Tv {
 			stdout: 'ignore',
 			stderr: 'pipe',
 		})
+
+		this.playing = true
 
 		console.info('%splaying channel: %s (%d)', restarted ? 're' : '', name, p.pid)
 
@@ -146,13 +152,17 @@ export class Tv {
 					lastTimestamp = currentTimestamp
 				}
 			}
-		}, 15000)
+		}, 6000)
+
+		this.starting = false
 
 		p.exited.then(async (code) => {
 			console.info('exited: %d', code)
 			clearInterval(timer)
 
-			if (code === 0 && restarted) {
+			this.playing = false
+
+			if (code === 0 && restarted && !this.starting) {
 				await Bun.sleep(5000)
 				this.play(name, restarted)
 			}
