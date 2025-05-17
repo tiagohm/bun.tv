@@ -1,3 +1,5 @@
+import type { ReadableStreamReader } from 'stream/web'
+
 export interface Channel {
 	readonly url: string
 	readonly name: string
@@ -15,10 +17,11 @@ const IGNORE_EXTENSIONS = ['.mp4', '.mkv', '.avi']
 
 export class Tv {
 	private readonly channels = new Map<string, Channel>()
-	private process: Bun.Subprocess | undefined
-	private channel: Channel | undefined
-	private starting = false
-	private playing = false
+	private process?: Bun.Subprocess
+	private channel?: Channel
+	// biome-ignore lint/suspicious/noExplicitAny:
+	private timer?: any
+	private reader?: ReadableStreamReader<Uint8Array<ArrayBufferLike>>
 
 	list() {
 		return Array.from(this.channels.values())
@@ -30,6 +33,10 @@ export class Tv {
 
 	clear() {
 		this.channels.clear()
+	}
+
+	get currentChannel() {
+		return this.channel
 	}
 
 	async kill(name = this.channel?.name) {
@@ -110,15 +117,14 @@ export class Tv {
 	async play(name: string, restarted: boolean = false) {
 		const channel = this.channels.get(name)
 
-		if (!channel || this.starting) return false
+		if (!channel) return false
 
-		this.starting = true
-
-		await this.kill()
+		await this.stop()
 
 		this.channel = channel
 
-		const commands = [Bun.env.FFPLAY || 'ffplay', '-nostats', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '2000000', '-hide_banner', '-fs', '-window_title', channel.name, '-sync', 'video']
+        // https://ffmpeg.org/ffplay.html
+		const commands = [Bun.env.FFPLAY || 'ffplay', '-fflags', 'nobuffer', '-flags', 'low_delay', '-framedrop', '-probesize', '1000000', '-analyzeduration', '3000000', '-hide_banner', '-fs', '-window_title', channel.name]
 
 		if (Bun.env.IPTV_OUTPUT_TYPE === 'hls') commands.push('-infbuf')
 		commands.push(channel.url)
@@ -128,8 +134,6 @@ export class Tv {
 			stderr: 'pipe',
 		})
 
-		this.playing = true
-
 		console.info('%splaying channel: %s (%d)', restarted ? 're' : '', name, p.pid)
 
 		const reader = p.stderr.getReader()
@@ -138,15 +142,13 @@ export class Tv {
 		let currentTimestamp = 0
 		let lastTimestamp = 0
 
-		const timer = setInterval(async () => {
+		this.timer = setInterval(async () => {
 			if (currentTimestamp) {
 				console.info('time: %d s', currentTimestamp)
 
 				if (lastTimestamp === 0) {
 					lastTimestamp = currentTimestamp
 				} else if (currentTimestamp === lastTimestamp) {
-					await reader.cancel()
-					clearInterval(timer)
 					await this.play(name, true)
 				} else {
 					lastTimestamp = currentTimestamp
@@ -154,17 +156,13 @@ export class Tv {
 			}
 		}, 6000)
 
-		this.starting = false
-
 		p.exited.then(async (code) => {
 			console.info('exited: %d', code)
-			clearInterval(timer)
 
-			this.playing = false
+			await this.stop()
 
-			if (code === 0 && restarted && !this.starting) {
-				await Bun.sleep(5000)
-				this.play(name, restarted)
+			if (code === 0 && restarted) {
+				this.timer = setInterval(() => this.play(name, restarted), 5000)
 			}
 		})
 
@@ -186,7 +184,15 @@ export class Tv {
 		})
 
 		this.process = p
+		this.reader = reader
 
 		return true
+	}
+
+	async stop() {
+		clearInterval(this.timer)
+		this.timer = undefined
+		await this.reader?.cancel()
+		await this.kill()
 	}
 }
